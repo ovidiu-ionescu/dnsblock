@@ -1,0 +1,6 @@
+* text=auto
+*.txt text
+*.json text
+*.js text
+*gitignore text
+
