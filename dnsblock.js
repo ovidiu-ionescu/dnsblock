@@ -82,13 +82,46 @@ class AdCache {
 
 const domainCache = new AdCache();
 
-function processHostsBlocked(cache, filename, continuation) {
+function processHostsBlocked(cache, filename) {
     const rl = readline.createInterface({ input: fs.createReadStream(filename) });
     rl.on('line', (line) => cache.blockDomain(line));
-    rl.on('close', continuation);
+
+    return new Promise(function(resolve, reject) {
+        rl.on('close', () => resolve() );
+    });
 }
 
-//processHostsBlocked('domains.blocked');
 
+function processCommandLine(commandLineParameters) {
 
-module.exports = { domainCache: domainCache, processHostsBlocked: processHostsBlocked };
+    let params = {
+        hostsBlocked: "hosts_blocked.txt",
+        domainsBlocked: null,
+        zonesFile: "zones.adblock",
+        dnsQueryLog: "",
+        domainsIgnoreFile: "zones.searchads",
+        zonesFile: null,
+        command: null,
+        commandParams: []
+    };
+
+    const conditions = { hostsBlocked: /\.txt$/i, domainsBlocked: /\.blocked$/i, dnsQueryLog: /\.log$/i, zonesFile: /\.adblock/ };
+
+    commandLineParameters.slice(2).forEach((param) => {
+        if (!params.command) {
+            -1 == Object.keys(conditions).findIndex((key) => param.match(conditions[key]) && (params[key] = param)) && (params.command = param);
+        } else {
+            params.commandParams.push(param);
+        }
+    });
+
+    return params;
+}
+
+function main() {
+    let params = processCommandLine(process.argv);
+}
+
+main();
+
+module.exports = { domainCache: domainCache, processHostsBlocked: processHostsBlocked, main: main, processCommandLine: processCommandLine };

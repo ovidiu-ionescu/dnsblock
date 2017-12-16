@@ -49,8 +49,8 @@ describe('Testing core functionality', () => {
 describe('Testing file processing', () => {
     describe('Test processing the hosts blocked file', ()=> {
         dnsblock.domainCache.resetCache();
-        it(`should process the blocked hosts file`, (done) => {
-            dnsblock.processHostsBlocked(dnsblock.domainCache, 'domains.blocked', done);
+        it(`should process the blocked hosts file`, () => {
+            return dnsblock.processHostsBlocked(dnsblock.domainCache, 'domains.blocked');
         });
         it(`domain ${REALADSERVER} should now be blocked`, () => {
            expect(dnsblock.domainCache.isBlocked(REALADSERVER)).to.be.true;
@@ -83,6 +83,25 @@ describe('Testing output', () => {
         });
         it('checksum of the file should be', () => {
                 expect(zoneChecksum).to.equal('56ce8d73435a693cf160a0a2ee6d7dc7');
+        });
+    });
+});
+
+describe('Test command line', () => {
+    describe('Parse the command line parameters', () => {
+        it('should interpret correctly the names of the files', () => {
+            let commandLineParams = ['node', 'dnsblock.js', 'myhost.txt', 'mydom.blocked', 'myquery.log', 'myzones.adblock', 'unu', 'doi', 'trei' ];
+            let params = dnsblock.processCommandLine(commandLineParams);
+            expect(params).to.deep.equal({
+                hostsBlocked: 'myhost.txt',
+                domainsBlocked: 'mydom.blocked',
+                zonesFile: 'myzones.adblock',
+                dnsQueryLog: 'myquery.log',
+                domainsIgnoreFile: 'zones.searchads',
+                command: 'unu',
+                commandParams: ['doi', 'trei']
+
+            });
         });
     });
 });
