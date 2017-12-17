@@ -141,7 +141,7 @@ function processCommandLine(commandLineParameters) {
     };
 
     const conditions = { hostsBlocked: /\.txt$/i, domainsBlocked: /\.blocked$/i, dnsQueryLog: /\.log$/i, zonesFile: /\.adblock/ };
-
+//ce forma are commandLineParameters??
     commandLineParameters.slice(2).forEach((param) => {
         if (!params.command) {
             -1 === Object.keys(conditions).findIndex((key) => param.match(conditions[key]) && (params[key] = param)) && (params.command = param);
