@@ -1,4 +1,4 @@
-'use strict'
+'use strict';
 
 const expect = require('chai').expect;
 const dnsblock = require('../dnsblock.js');
@@ -12,7 +12,7 @@ const REALADSERVER = 'neptune.appads.com';
 
 function shuffle(b) {
     let a = b.slice();
-    var j, x, i;
+    let j, x, i;
     for (i = a.length - 1; i > 0; i--) {
         j = Math.floor(Math.random() * (i + 1));
         x = a[i];
@@ -62,6 +62,9 @@ describe('Testing file processing', () => {
 });
 
 describe('Testing output', () => {
+    const zoneFileName = 'zoneinfo-test.txt';
+    before(() => {try {fs.unlinkSync(zoneFileName) } catch(e){}});
+    after(() => fs.unlinkSync(zoneFileName));
     describe('Testing serialization', () => {
         const domains = ['promotie.ads', 'publicitate.ads', 'reclame.ads', 'neptune.appads.com', 'adserver.net' ];
 
@@ -74,8 +77,7 @@ describe('Testing output', () => {
         });
         let zoneChecksum;
         it('should write a zone file', (done) => {
-            let zoneFileName = 'zoneinfo-test.txt';
-            dnsblock.domainCache.generateZone(zoneFileName);
+            dnsblock.generateZone(dnsblock.domainCache, zoneFileName);
             fs.readFile(zoneFileName, (err, data) => {
                 zoneChecksum = checksum(data);
                 done(err);
