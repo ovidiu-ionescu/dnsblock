@@ -141,7 +141,7 @@ function processCommandLine(commandLineParameters) {
     };
 
     const conditions = { hostsBlocked: /\.txt$/i, domainsBlocked: /\.blocked$/i, dnsQueryLog: /\.log$/i, zonesFile: /\.adblock/ };
-//ce forma are commandLineParameters??
+
     commandLineParameters.slice(2).forEach((param) => {
         if (!params.command) {
             -1 === Object.keys(conditions).findIndex((key) => param.match(conditions[key]) && (params[key] = param)) && (params.command = param);
@@ -156,7 +156,7 @@ function processCommandLine(commandLineParameters) {
 function help() {
     console.error( `
     Usage:
-${process.argv[1]} <blocked_hosts_file.txt> <domains.blocked> <dnsquery.log> <zones.adblock> help|simplify|processlog|add|generatezone|addgen
+${process.argv[1]} <blocked_hosts_file.txt> <domains.blocked> <dnsquery.log> <zones.adblock> help|simplify|processlog|add|generatezone|addgen <extra-parameters>...
 
     Files are identified by extension.";
     The first non file parameter is the command. All following parameters are command parameters.
