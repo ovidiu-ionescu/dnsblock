@@ -43,11 +43,28 @@ describe('Testing core functionality', () => {
         it(`should detect ${WIKIPEDIA} as not blocked`, () => {
             expect(dnsblock.domainCache.isBlocked(WIKIPEDIA)).to.be.false;
         });
-    })
+    });
+    describe('Test line parsing', () => {
+        it('should parse a domain and a comment', () => {
+            expect(dnsblock.processHostsLine(' bad.adspammer.com # this is my comment   ')).to.deep.equal({
+                domain: 'bad.adspammer.com',
+                comment: ' # this is my comment'
+            });
+        });
+        it('should throw an exception when domain is invalid', () => {
+            let badDomain = 'bad_domain@';
+            expect(() => dnsblock.processHostsLine(badDomain)).to.throw(`${badDomain} is not a valid domain`);
+        });
+    });
+    describe('Test the BlockedDomain class', () => {
+        it('should handle no comment', () => {
+            expect(new dnsblock.BlockedDomain(WIKIPEDIA).serialize()).to.equal(WIKIPEDIA);
+        });
+    });
 });
 
 describe('Testing file processing', () => {
-    describe('Test processing the hosts blocked file', ()=> {
+    describe('Test processing the hosts blocked file', () => {
         dnsblock.domainCache.resetCache();
         it(`should process the blocked hosts file`, () => {
             return dnsblock.processHostsBlocked(dnsblock.domainCache, 'domains.blocked');
@@ -64,7 +81,7 @@ describe('Testing file processing', () => {
 describe('Testing output', () => {
     const zoneFileName = 'zoneinfo-test.txt';
     before(() => {try {fs.unlinkSync(zoneFileName) } catch(e){}});
-    after(() => fs.unlinkSync(zoneFileName));
+    // after(() => fs.unlinkSync(zoneFileName));
     describe('Testing serialization', () => {
         const domains = ['promotie.ads', 'publicitate.ads', 'reclame.ads', 'neptune.appads.com', 'adserver.net' ];
 
@@ -73,7 +90,7 @@ describe('Testing output', () => {
             shuffle(domains).forEach( (domain) => dnsblock.domainCache.blockDomain(domain) );
             let result = dnsblock.domainCache.serializeBlockedDomains();
 
-            result.forEach((domain, index) => expect(domain).to.be.equal(domains[index]) );
+            result.forEach((blockedDomain, index) => expect(blockedDomain.domain).to.be.equal(domains[index]) );
         });
         let zoneChecksum;
         it('should write a zone file', (done) => {

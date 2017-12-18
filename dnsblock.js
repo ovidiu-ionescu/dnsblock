@@ -19,7 +19,16 @@ const REMOVE_END_DOT = /^(.+)\.$/;
 const EXTRACT_DOMAIN_FROM_ZONE = /"(.+?)"/;
 const COMMENT_REGEX = /^\s*#/;
 
+class BlockedDomain {
+    constructor(domain, comment) {
+        this.domain = domain;
+        this.comment = comment || '#';
+    }
 
+    serialize() {
+        return this.comment === '#' ? this.domain : `${this.domain}${this.comment}`;
+    }
+}
 
 class AdCache {
     constructor() {
@@ -31,7 +40,7 @@ class AdCache {
     }
 
     blockDomain(domain, comment) {
-        comment = comment || '*';
+        comment = comment || '#';
         let p = this.cache;
         let tailKey;
         let tailHash;
@@ -40,14 +49,11 @@ class AdCache {
             tailKey = key;
             path.unshift(key);
             tailHash = p;
-            if(p[key]) {
-                if(typeof p[key] === 'string') {
-                    log(`Domain ${domain} already blocked by ${path.join('.')}`);
-                    return false;
-                }
-            } else {
-                p[key] = {};
+            if(typeof p[key] === 'string') {
+                log(`Domain ${domain} already blocked by ${path.join('.')}`);
+                return false;
             }
+            p[key] = p[key] || {};
             p = p[key];
         }
         return tailKey && (tailHash[tailKey] = comment);
@@ -74,7 +80,7 @@ class AdCache {
             this._traverseCache(cache[key], path, result);
             path.shift();
         });
-        Object.keys(cache).sort().filter(v => typeof cache[v] === 'string').forEach((key) => result.push(key + '.' + path.join('.')));
+        Object.keys(cache).sort().filter(key => typeof cache[key] === 'string').forEach((key) => result.push(new BlockedDomain(key + '.' + path.join('.'), cache[key])));
     }
 
     serializeBlockedDomains() {
@@ -87,16 +93,30 @@ class AdCache {
 const domainCache = new AdCache();
 const ignoredDomains = {};
 
+
+function processHostsLine(line) {
+    line = line.toLowerCase().trim();
+    let spaceIndex = line.indexOf(' ');
+    let domain = line;
+    let comment = '';
+    if(spaceIndex != -1) {
+        domain = line.substring(0, spaceIndex);
+        comment = line.substring(spaceIndex);
+    }
+    if(!domain.match(VALID_DOMAIN_REGEX)) {
+        throw `${domain} is not a valid domain`;
+    }
+    return new BlockedDomain(domain, comment);
+}
+
 function processHostsBlocked(cache, filename) {
     const rl = readline.createInterface({ input: fs.createReadStream(filename) });
     rl.on('line', (line) => {
-        let parts = line.trim().split(' ');
-        let domain = parts[0].toLowerCase();
-        let comment = parts[1];
-        if(domain.match(VALID_DOMAIN_REGEX)) {
-            cache.blockDomain(domain, comment);
-        } else {
-            console.error(`${domain} is not a valid domain`);
+        try {
+            let blockedDomain = processHostsLine(line);
+            cache.blockDomain(blockedDomain.domain, blockedDomain.comment);
+        } catch(e) {
+            console.error(e);
         }
     });
 
@@ -108,13 +128,13 @@ function processHostsBlocked(cache, filename) {
 function listBlockedDomains(cache, filename) {
     let listDomains = cache.serializeBlockedDomains();
     let out = fs.createWriteStream(filename);
-    listDomains.forEach((domain) => out.write(`${domain}\n`));
+    listDomains.forEach((domain) => out.write(`${domain.serialize()}\n`));
     out.close();
 }
 
 function generateZone(cache, filename) {
     let blockedDomains = cache.serializeBlockedDomains();
-    let zoneInfo = blockedDomains.reduce((accumulator, domain) => accumulator + `zone "${domain}" { type master; file "/etc/bind/ionescu/adblock/db.adblock"; };\n`, '');
+    let zoneInfo = blockedDomains.reduce((accumulator, blockedDomain) => accumulator + `zone "${blockedDomain.domain}" { type master; file "/etc/bind/ionescu/adblock/db.adblock"; };\n`, '');
     fs.writeFile(filename, zoneInfo, (err) => err && console.error('Error is: ', err));
 }
 
@@ -211,4 +231,12 @@ async function main() {
 
 main();
 
-module.exports = { domainCache: domainCache, processHostsBlocked: processHostsBlocked, main: main, processCommandLine: processCommandLine, generateZone: generateZone };
+module.exports = {
+    domainCache: domainCache,
+    processHostsLine: processHostsLine,
+    processHostsBlocked: processHostsBlocked,
+    main: main,
+    processCommandLine: processCommandLine,
+    generateZone: generateZone,
+    BlockedDomain: BlockedDomain
+};
