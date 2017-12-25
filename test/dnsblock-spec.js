@@ -32,18 +32,41 @@ function checksum (str, algorithm, encoding) {
 describe('Testing core functionality', () => {
     describe('Testing the domain cache', () => {
         it(`should accept domain ${ADSERVER} to block`, () => {
-            expect(!!dnsblock.domainCache.blockDomain(ADSERVER)).to.be.true;
+            expect(!!dnsblock.blockedDomains.blockDomain(ADSERVER)).to.be.true;
         });
         it(`should detect domain ${WWWADSERVER} as already blocked`, () => {
-            expect(dnsblock.domainCache.blockDomain(WWWADSERVER)).to.be.false;
+            expect(dnsblock.blockedDomains.blockDomain(WWWADSERVER)).to.be.false;
         });
         it(`should detect ${ADSERVER} as blocked`, () => {
-            expect(dnsblock.domainCache.isBlocked(ADSERVER)).to.be.true;
+            expect(dnsblock.blockedDomains.isBlocked(ADSERVER)).to.be.true;
         });
         it(`should detect ${WIKIPEDIA} as not blocked`, () => {
-            expect(dnsblock.domainCache.isBlocked(WIKIPEDIA)).to.be.false;
+            expect(dnsblock.blockedDomains.isBlocked(WIKIPEDIA)).to.be.false;
         });
     });
+    describe('Testing the whitelisting', () => {
+        it(`should accept domain ${WIKIPEDIA} to whitelist`, () => {
+            expect(!!dnsblock.whitelistedDomains.whitelistDomain(WIKIPEDIA, 'dictionary')).to.be.true;
+        });
+        it(`should detect ${WIKIPEDIA} as whitelisted`, () => {
+            expect(dnsblock.whitelistedDomains.isWhitelisted(WIKIPEDIA)).to.be.true;
+        });
+        it(`should detect domain wikipedia.org as whitelisted`, () => {
+            expect(dnsblock.whitelistedDomains.isWhitelisted('wikipedia.org')).to.be.true;
+        });
+        it(`should detect domain ${'ftp.' + WIKIPEDIA} as not whitelisted`, () => {
+            expect(dnsblock.whitelistedDomains.isWhitelisted('ftp.' + WIKIPEDIA)).to.be.false;
+        });
+        it(`should detect domain ${ADSERVER} as not whitelisted`, () => {
+            expect(dnsblock.whitelistedDomains.isWhitelisted(ADSERVER)).to.be.false;
+        });
+    });
+    describe('Testing whitelisting and blocking together', () => {
+        it('should not block whitelisted domain', () => {
+
+        });
+    });
+
     describe('Test line parsing', () => {
         it('should parse a domain and a comment', () => {
             expect(dnsblock.processHostsLine(' bad.adspammer.com # this is my comment   ')).to.deep.equal({
@@ -65,15 +88,15 @@ describe('Testing core functionality', () => {
 
 describe('Testing file processing', () => {
     describe('Test processing the hosts blocked file', () => {
-        dnsblock.domainCache.resetCache();
+        dnsblock.blockedDomains.resetCache();
         it(`should process the blocked hosts file`, () => {
-            return dnsblock.processHostsBlocked(dnsblock.domainCache, 'domains.blocked');
+            return dnsblock.processHostsBlocked(dnsblock.blockedDomains, 'domains.blocked');
         });
         it(`domain ${REALADSERVER} should now be blocked`, () => {
-           expect(dnsblock.domainCache.isBlocked(REALADSERVER)).to.be.true;
+           expect(dnsblock.blockedDomains.isBlocked(REALADSERVER)).to.be.true;
         });
         it(`domain ${WIKIPEDIA} should not be blocked`, () => {
-            expect(dnsblock.domainCache.isBlocked(WIKIPEDIA)).to.be.false;
+            expect(dnsblock.blockedDomains.isBlocked(WIKIPEDIA)).to.be.false;
         });
     });
 });
@@ -86,15 +109,15 @@ describe('Testing output', () => {
         const domains = ['promotie.ads', 'publicitate.ads', 'reclame.ads', 'neptune.appads.com', 'adserver.net' ];
 
         it('should produce a sorted list of domains', () => {
-            dnsblock.domainCache.resetCache();
-            shuffle(domains).forEach( (domain) => dnsblock.domainCache.blockDomain(domain) );
-            let result = dnsblock.domainCache.serializeBlockedDomains();
+            dnsblock.blockedDomains.resetCache();
+            shuffle(domains).forEach( (domain) => dnsblock.blockedDomains.blockDomain(domain) );
+            let result = dnsblock.blockedDomains.serializeBlockedDomains();
 
             result.forEach((blockedDomain, index) => expect(blockedDomain.domain).to.be.equal(domains[index]) );
         });
         let zoneChecksum;
         it('should write a zone file', (done) => {
-            dnsblock.generateZone(dnsblock.domainCache, zoneFileName);
+            dnsblock.generateZone(dnsblock.blockedDomains, zoneFileName);
             fs.readFile(zoneFileName, (err, data) => {
                 zoneChecksum = checksum(data);
                 done(err);
@@ -113,14 +136,40 @@ describe('Test command line', () => {
             let params = dnsblock.processCommandLine(commandLineParams);
             expect(params).to.deep.equal({
                 hostsBlocked: 'myhost.txt',
+                hostsWhitelisted: '',
                 domainsBlocked: 'mydom.blocked',
                 zonesFile: 'myzones.adblock',
                 dnsQueryLog: 'myquery.log',
-                domainsIgnoreFile: 'zones.searchads',
                 command: 'unu',
                 commandParams: ['doi', 'trei']
 
             });
+        });
+    });
+});
+
+describe('Test filtering', () => {
+    describe('Parse query log', () => {
+        beforeEach(() => dnsblock.blockedDomains.resetCache());
+        it('should parse a query for a blocked domain', () => {
+
+        });
+        it('should parse a query for a whitelisted domain', () => {
+
+        });
+        it('should resolve a query client', async () => {
+            let line = '22-Dec-2017 21:09:28.799 client 127.0.0.1#55983 (shavar.prod.mozaws.net): view internal: query: shavar.prod.mozaws.net IN A +ED (127.0.0.1)';
+            let parsedLine = await dnsblock.filterLine(line);
+            expect(parsedLine).to.be.equal('22-Dec-2017 21:09:28.799 client: localhost, query: shavar.prod.mozaws.net');
+        });
+    });
+
+    describe('Test reverse DNS', () => {
+        let msIp = '184.24.199.187';
+        let msAkamai = 'a184-24-199-187.deploy.static.akamaitechnologies.com';
+        it(`should translate ${msIp} to ${msAkamai}`, async () => {
+            const hostname = await dnsblock.reverseDNS(msIp);
+            expect(hostname).to.equal(msAkamai);
         });
     });
 });
