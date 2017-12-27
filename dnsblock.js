@@ -235,7 +235,7 @@ function processCommandLine(commandLineParameters) {
 function help() {
     console.error(`
     Usage:
-${process.argv[1]} <blocked_hosts_file.txt> <hosts.whitelisted> <domains.blocked> <dnsquery.log> <zones.adblock> help|simplify|processlog|add|generatezone|addgen <extra-parameters>...
+${process.argv[1]} <blocked_hosts_file.txt> <hosts.whitelisted> <domains.blocked> <dnsquery.log> <zones.adblock> help|simplify|simplifyDomains|processlog|add|generatezone|addgen <extra-parameters>...
 
     Files are identified by extension.";
     The first non file parameter is the command. All following parameters are command parameters.
@@ -296,15 +296,19 @@ function filter() {
 
 async function main() {
     let params = processCommandLine(process.argv);
+    params.hostsWhitelisted && await processHostsWhitelisted(whitelistedDomains, params.hostsWhitelisted);
     await processHostsBlocked(blockedDomains, params.hostsBlocked);
     params.domainsBlocked && await processHostsBlocked(blockedDomains, params.domainsBlocked);
-    params.hostsWhitelisted && await processHostsWhitelisted(whitelistedDomains, params.hostsWhitelisted);
 
     params.command = params.command || help;
 
     switch (params.command) {
         case 'simplify':
             listBlockedDomains(blockedDomains, params.hostsBlocked);
+            break;
+
+        case 'simplifyDomains':
+            listBlockedDomains(blockedDomains, params.domainsBlocked);
             break;
 
         case 'add':
