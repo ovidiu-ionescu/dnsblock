@@ -7,7 +7,7 @@
     "test": "./node_modules/.bin/mocha --reporter spec"
   },
   "author": "Ovidiu Ionescu",
-  "license": "ISC",
+  "license": "AGPL-3.0-or-later",
   "devDependencies": {
     "@types/chai": "^4.0.10",
     "chai": "^4.1.2",
