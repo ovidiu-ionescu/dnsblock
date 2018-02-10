@@ -162,6 +162,10 @@ describe('Test filtering', () => {
             let parsedLine = await dnsblock.filterLine(line);
             expect(parsedLine).to.be.equal('22-Dec-2017 21:09:28.799 client: localhost, query: shavar.prod.mozaws.net');
         });
+        it('should not choke on the line that caused filtering bug 1', async () => {
+            let line = '10-Feb-2018 20:35:16.091 client 123.123.123.12#60697 (host.com): view external: query: host.com IN AXFR -T (10.0.0.1)';
+            let parsedLine = await dnsblock.filterLine(line);
+        });
     });
 
     describe('Test reverse DNS', () => {

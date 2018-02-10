@@ -20,6 +20,7 @@ const EXTRACT_IP = /^(.+)\sclient\s(\d+\.0\.0\.\d+)#\d+.+query:\s(.+)\sIN A.+/;
 const REMOVE_END_DOT = /^(.+)\.$/;
 const EXTRACT_DOMAIN_FROM_ZONE = /"(.+?)"/;
 const COMMENT_REGEX = /^\s*#/;
+const NUMERIC_IPV4 = /^[0-9\.]+$/;
 
 class BlockedDomain {
     constructor(domain, comment) {
@@ -56,6 +57,29 @@ class DomainIndex {
         this._traverseCache(this.cache, [], result);
         return result;
     }
+
+    /**
+     * Visits all nodes in the cache tree recursively
+     * @param cache Cache tree node from where to start exploring
+     * @param path The path to the current node, array of strings
+     * @param accumulator Accumulator object
+     * @param processor Processor function, gets invoked for every node
+     * processor(node, path, accumulator)
+     * @private
+     */
+    _visitCache(cache, path, accumulator, processor) {
+        Object.keys(cache).sort().filter(v => typeof cache[v] !== 'string').forEach((key) => {
+            path.unshift(key);
+            this._visitCache(cache[key], path, accumulator, processor);
+            path.shift();
+        });
+        return processor(cache, path, accumulator);
+    }
+
+    visit(processor, accumulator) {
+        return this._visitCache(this.cache, [], accumulator, processor);
+    }
+
 }
 
 class BlockedDomainIndex extends DomainIndex {
@@ -145,7 +169,7 @@ function processHostsLine(line) {
         domain = line.substring(0, spaceIndex);
         comment = line.substring(spaceIndex);
     }
-    if (!domain.match(VALID_DOMAIN_REGEX)) {
+    if (!domain.match(VALID_DOMAIN_REGEX) || domain.match(NUMERIC_IPV4) || domain === 'localhost' || domain === 'localhost.localdomain') {
         throw `${domain} is not a valid domain`;
     }
     return new BlockedDomain(domain, comment);
@@ -235,7 +259,7 @@ function processCommandLine(commandLineParameters) {
 function help() {
     console.error(`
     Usage:
-${process.argv[1]} <blocked_hosts_file.txt> <hosts.whitelisted> <domains.blocked> <dnsquery.log> <zones.adblock> help|simplify|simplifyDomains|processlog|add|generatezone|addgen <extra-parameters>...
+${process.argv[1]} <blocked_hosts_file.txt> <hosts.whitelisted> <domains.blocked> <dnsquery.log> <zones.adblock> help|simplify|simplifyDomains|processlog|add|generatezone|addgen|advise <extra-parameters>...
 
     Files are identified by extension.";
     The first non file parameter is the command. All following parameters are command parameters.
@@ -270,6 +294,7 @@ async function filterLine(line) {
         return `blocked: ${domain}`;
     }
     let parts = EXTRACT_IP.exec(line);
+    if(!parts) return line;
     let time = parts[1];
     let ip = parts[2];
     let remoteHost = parts[3];
@@ -292,6 +317,27 @@ function filter() {
         let filteredLine = await filterLine(line);
         filteredLine && console.log(filteredLine);
     })
+}
+
+
+/**
+ * Iterates the blocked domains cache and signals common suffixes in level 3
+ * @param cache The blocked domains cache
+ */
+function advise(cache) {
+    let stats = cache.visit((node, path, accumulator) => {
+        if(path.length > 1) {
+            let count = Object.keys(node).length;
+            if( count > 4) {
+                accumulator.unshift({ count: count, path: path.join('.') });
+                //console.log(count + ' ' + path.join('.'));
+            }
+        }
+        return accumulator;
+    }, []);
+
+    // stats.sort((a, b) => a.count - b.count).forEach((e) => console.log(`${e.count} ${e.path}`));
+    stats.forEach((e) => console.log(`${e.count} ${e.path}`));
 }
 
 async function main() {
@@ -335,6 +381,10 @@ async function main() {
 
         case 'processlog':
             // process_dns_query_log $dns_query_log, @params;
+            break;
+
+        case 'advise':
+            advise(blockedDomains);
             break;
 
         case 'help':
