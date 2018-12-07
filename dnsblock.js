@@ -225,6 +225,27 @@ function generateZone(cache, filename) {
     fs.writeFile(filename, zoneInfo, (err) => err && console.error('Error is: ', err));
 }
 
+const generateRpz = (cache, filename) => {
+    const blockedDomains = cache.serializeBlockedDomains();
+    const prefix = 
+`$TTL 60
+@   IN    SOA  localhost. root.localhost.  (
+        2   ; serial 
+        3H  ; refresh 
+        1H  ; retry 
+        1W  ; expiry 
+        1H) ; minimum 
+    IN    NS    localhost.
+`;
+    const rpz = blockedDomains.reduce((accumulator, blockedDomain) => accumulator + 
+`${blockedDomain.domain} CNAME .
+*.${blockedDomain.domain} CNAME .
+`, prefix);
+
+fs.writeFile(filename, rpz, (err) => err && console.error('Error is: ', err));
+
+}
+
 function processCommandLine(commandLineParameters) {
 
     let params = {
@@ -232,6 +253,7 @@ function processCommandLine(commandLineParameters) {
         hostsWhitelisted: '',
         domainsBlocked: null,
         zonesFile: 'zones.adblock',
+        rpzFile: 'rpz.db',
         dnsQueryLog: '',
         command: null,
         commandParams: []
@@ -364,6 +386,10 @@ async function main() {
         case 'generatezone':
             // load_ignored_domains $domains_ignore_file;
             generateZone(blockedDomains, params.zonesFile);
+            break;
+
+        case 'generateRpz':
+            generateRpz(blockedDomains, params.rpzFile);
             break;
 
         case 'addgen':
