@@ -228,7 +228,11 @@ async function digList(domain) {
     }
 }
 
-function collectHostsWhitelisted(filename) {
+/**
+ * Fetch the list of domains to whitelist from the file
+ * @param {string} filename 
+ */
+function collectHostsFromFile(filename) {
     const rl = readline.createInterface({ input: fs.createReadStream(filename) });
 
     const result = [];
@@ -246,16 +250,17 @@ function collectHostsWhitelisted(filename) {
 }
 
 async function processHostsWhitelisted(cache, filename) {
-    const whitelistedDomains = await collectHostsWhitelisted(filename);
+    const hostsWhitelisted = await collectHostsFromFile(filename);
 
-    whitelistedDomains.forEach(async whitelistedDomain => {
+    const promises = hostsWhitelisted.map(async whitelistedDomain => {
         const cnameList = await digList(whitelistedDomain.domain);
         cnameList.map(cname =>
             cache.whitelistDomain(cname, `${whitelistedDomain.serialize()}`))
         });
+    await Promise.all(promises);
 }
 
-function processHostsBlocked(cache, filename) {
+function processHostsBlocked(cache, filename, whitelistedDomains) {
     const rl = readline.createInterface({input: fs.createReadStream(filename)});
     rl.on('line', (line) => {
         try {
@@ -445,8 +450,8 @@ function advise(cache) {
 async function main() {
     let params = processCommandLine(process.argv);
     params.hostsWhitelisted && await processHostsWhitelisted(whitelistedDomains, params.hostsWhitelisted);
-    await processHostsBlocked(blockedDomains, params.hostsBlocked);
-    params.domainsBlocked && await processHostsBlocked(blockedDomains, params.domainsBlocked);
+    await processHostsBlocked(blockedDomains, params.hostsBlocked, whitelistedDomains);
+    params.domainsBlocked && await processHostsBlocked(blockedDomains, params.domainsBlocked, whitelistedDomains);
 
     params.command = params.command || help;
 
