@@ -38,7 +38,10 @@ describe('Testing core functionality', () => {
             expect(dnsblock.blockedDomains.blockDomain(WWWADSERVER)).to.be.false;
         });
         it(`should detect ${ADSERVER} as blocked`, () => {
-            expect(dnsblock.blockedDomains.isBlocked(ADSERVER)).to.be.true;
+            expect(!!dnsblock.blockedDomains.isBlocked(ADSERVER)).to.be.true;
+        });
+        it(`should give the blocker for ADSERVER as ADSERVER`, () => {
+            expect(dnsblock.blockedDomains.isBlocked(ADSERVER)).to.equal(ADSERVER);
         });
         it(`should detect ${WIKIPEDIA} as not blocked`, () => {
             expect(dnsblock.blockedDomains.isBlocked(WIKIPEDIA)).to.be.false;
@@ -49,10 +52,10 @@ describe('Testing core functionality', () => {
             expect(!!dnsblock.whitelistedDomains.whitelistDomain(WIKIPEDIA, 'dictionary')).to.be.true;
         });
         it(`should detect ${WIKIPEDIA} as whitelisted`, () => {
-            expect(dnsblock.whitelistedDomains.isWhitelisted(WIKIPEDIA)).to.be.true;
+            expect(!!dnsblock.whitelistedDomains.isWhitelisted(WIKIPEDIA)).to.be.true;
         });
         it(`should detect domain wikipedia.org as whitelisted`, () => {
-            expect(dnsblock.whitelistedDomains.isWhitelisted('wikipedia.org')).to.be.true;
+            expect(!!dnsblock.whitelistedDomains.isWhitelisted('wikipedia.org')).to.be.true;
         });
         it(`should detect domain ${'ftp.' + WIKIPEDIA} as not whitelisted`, () => {
             expect(dnsblock.whitelistedDomains.isWhitelisted('ftp.' + WIKIPEDIA)).to.be.false;

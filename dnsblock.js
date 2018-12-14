@@ -3,6 +3,12 @@
 const readline = require('readline');
 const fs = require('fs');
 const dns = require('dns');
+const util = require('util');
+
+const resolver = new dns.Resolver();
+resolver.setServers(['8.8.8.8']);
+
+const resolve = util.promisify(resolver.resolveAny.bind(resolver));
 
 const verbose = false;
 
@@ -28,8 +34,17 @@ class BlockedDomain {
         this.comment = comment || '#';
     }
 
+    get normalizedComment() {
+        return this.comment === '#' ? '' : this.comment;
+    }
+
     serialize() {
-        return this.comment === '#' ? this.domain : `${this.domain}${this.comment}`;
+        return this.normalizedComment ? `${this.domain}${this.comment}` : this.domain;
+    }
+
+    toString() {
+        const concat = this.normalizedComment ? this.domain + ' : ' + this.comment : this.domain;
+        return '[' + concat + ']';
     }
 }
 
@@ -44,6 +59,10 @@ class DomainIndex {
 
 
     _traverseCache(cache, path, result) {
+        if(typeof cache === 'string') {
+            result.push(new BlockedDomain(path.join('.'), cache));
+            return;
+        }
         Object.keys(cache).sort().filter(v => typeof cache[v] !== 'string').forEach((key) => {
             path.unshift(key);
             this._traverseCache(cache[key], path, result);
@@ -104,13 +123,16 @@ class BlockedDomainIndex extends DomainIndex {
         return tailKey && (tailHash[tailKey] = comment);
     }
 
+    // @return the rule that blocks the domain or false
     isBlocked(domain) {
         let p = this.cache;
+        const blocker = [];
         for (const key of domain.toLowerCase().split('.').reverse()) {
+            blocker.unshift(key);
             p = p[key];
             if (p) {
                 if (typeof p === 'string') {
-                    return true;
+                    return blocker.join('.');
                 }
             } else {
                 return false;
@@ -121,9 +143,15 @@ class BlockedDomainIndex extends DomainIndex {
 
 }
 
+/**
+ * Whitelisting works in reverse compared to blocking, i.e. in order to 
+ * whitelist a domain we must make sure none of it's ancestors is blocked
+ * So www.wikipedia.org automatically whitelists wikipedia.org
+ */
 class WhitelistedDomainIndex extends DomainIndex {
-    // longer sub domain will replace the domain
+    // longer subdomain will replace the domain
     whitelistDomain(domain, comment) {
+        console.log(`Whitelisting: ${domain} on behalf of ${comment}`);
         comment = comment || '#';
         let p = this.cache;
         let tailKey;
@@ -143,15 +171,21 @@ class WhitelistedDomainIndex extends DomainIndex {
         }
     }
 
+    /**
+     * @return the subtree that blocks the domain
+     */
     isWhitelisted(domain) {
         let p = this.cache;
+        // we go down the whitelist tree, all domain parts must be in full in the tree
         for (const key of domain.toLowerCase().split('.').reverse()) {
             p = p[key];
             if (!p) {
                 return false;
             }
         }
-        return true;
+        const result = [];
+        this._traverseCache(p, domain.toLowerCase().split('.'), result);
+        return result;
     }
 
 }
@@ -160,6 +194,11 @@ const blockedDomains = new BlockedDomainIndex();
 const whitelistedDomains = new WhitelistedDomainIndex();
 const localNameCache = { '127.0.0.1': 'localhost' };
 
+/**
+ * Goes through a line from the whiteliste file and extracts the name and the
+ * comment, then resolves all the cnames
+ * @param {string} line 
+ */
 function processHostsLine(line) {
     line = line.toLowerCase().trim();
     let spaceIndex = line.indexOf(' ');
@@ -170,26 +209,50 @@ function processHostsLine(line) {
         comment = line.substring(spaceIndex);
     }
     if (!domain.match(VALID_DOMAIN_REGEX) || domain.match(NUMERIC_IPV4) || domain === 'localhost' || domain === 'localhost.localdomain') {
-        throw `${domain} is not a valid domain`;
+        throw `[${domain}] is not a valid domain, comment: [${comment}]`;
     }
     return new BlockedDomain(domain, comment);
 }
 
-function processHostsWhitelisted(cache, filename) {
+async function digList(domain) {
+    let cname = domain;
+    const result = [];
+    while(cname) {
+        result.push(cname)
+        const addresses = await resolve(cname);
+        const a = addresses.find(e => e.type === 'A');
+        if(a) return result;
+        const c = addresses.find(e => e.type === 'CNAME');
+        if(!c) return result;
+        cname = c.value;
+    }
+}
+
+function collectHostsWhitelisted(filename) {
     const rl = readline.createInterface({ input: fs.createReadStream(filename) });
 
+    const result = [];
     rl.on('line', (line) => {
         try {
-            let whitelistedDomain = processHostsLine(line);
-            cache.whitelistDomain(whitelistedDomain.domain, whitelistedDomain.comment);
+            result.unshift(processHostsLine(line));
         } catch(e) {
             console.error(e);
         }
     });
 
     return new Promise(function (resolve) {
-        rl.on('close', () => resolve());
+        rl.on('close', () => resolve(result));
     });
+}
+
+async function processHostsWhitelisted(cache, filename) {
+    const whitelistedDomains = await collectHostsWhitelisted(filename);
+
+    whitelistedDomains.forEach(async whitelistedDomain => {
+        const cnameList = await digList(whitelistedDomain.domain);
+        cnameList.map(cname =>
+            cache.whitelistDomain(cname, `${whitelistedDomain.serialize()}`))
+        });
 }
 
 function processHostsBlocked(cache, filename) {
@@ -197,8 +260,9 @@ function processHostsBlocked(cache, filename) {
     rl.on('line', (line) => {
         try {
             let blockedDomain = processHostsLine(line);
-            if(whitelistedDomains.isWhitelisted(blockedDomain.domain)) {
-                console.log(`Domain ${blockedDomain.domain} is whitelisted`);
+            const whitelistedBy = whitelistedDomains.isWhitelisted(blockedDomain.domain);
+            if(whitelistedBy) {
+                console.log(`Domain ${blockedDomain.domain} is whitelisted by ${whitelistedBy}`);
             } else {
                 cache.blockDomain(blockedDomain.domain, blockedDomain.comment);
             }
@@ -246,6 +310,22 @@ fs.writeFile(filename, rpz, (err) => err && console.error('Error is: ', err));
 
 }
 
+async function whitelist(cache, domain, whitelistCache) {
+    console.log(`Whitelisting ${domain}`)
+    const cnameList = await digList(domain);
+    console.log(cnameList);
+    cnameList.forEach(cname => {
+        const blocker = cache.isBlocked(cname);
+        if(blocker) {
+            console.log(`${blocker} # ${cname}`);
+        } else {
+            if(whitelistCache.isWhitelisted(cname)) {
+                console.log(`# ${domain} is whitelisted`);
+            }
+        }
+    });
+}
+
 function processCommandLine(commandLineParameters) {
 
     let params = {
@@ -281,7 +361,7 @@ function processCommandLine(commandLineParameters) {
 function help() {
     console.error(`
     Usage:
-${process.argv[1]} <blocked_hosts_file.txt> <hosts.whitelisted> <domains.blocked> <dnsquery.log> <zones.adblock> help|simplify|simplifyDomains|processlog|add|generatezone|addgen|advise <extra-parameters>...
+${process.argv[1]} <blocked_hosts_file.txt> <hosts.whitelisted> <domains.blocked> <dnsquery.log> <zones.adblock> help|simplify|simplifyDomains|processlog|add|generatezone|whitelist|addgen|advise <extra-parameters>...
 
     Files are identified by extension.";
     The first non file parameter is the command. All following parameters are command parameters.
@@ -396,6 +476,10 @@ async function main() {
             params.commandParams.forEach((domain) => blockedDomains.blockDomain(domain));
             // listBlockedDomains(domainCache, params.hostsBlocked);
             // generate_zone $zones_file;
+            break;
+
+        case 'whitelist':
+            whitelist(blockedDomains, params.commandParams[0], whitelistedDomains);
             break;
 
         case 'filter':
