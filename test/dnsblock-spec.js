@@ -8,7 +8,7 @@ const fs = require('fs');
 const ADSERVER = 'adserver.net';
 const WWWADSERVER = 'www.adserver.net';
 const WIKIPEDIA = 'www.wikipedia.org';
-const REALADSERVER = 'neptune.appads.com';
+const REALADSERVER = 'ads.adnet.am';
 
 function shuffle(b) {
     let a = b.slice();
@@ -79,7 +79,7 @@ describe('Testing core functionality', () => {
         });
         it('should throw an exception when domain is invalid', () => {
             let badDomain = 'bad_domain@';
-            expect(() => dnsblock.processHostsLine(badDomain)).to.throw(`${badDomain} is not a valid domain`);
+            expect(() => dnsblock.processHostsLine(badDomain)).to.throw(`[${badDomain}] is not a valid domain, comment: []`);
         });
     });
     describe('Test the BlockedDomain class', () => {
@@ -93,10 +93,10 @@ describe('Testing file processing', () => {
     describe('Test processing the hosts blocked file', () => {
         dnsblock.blockedDomains.resetCache();
         it(`should process the blocked hosts file`, () => {
-            return dnsblock.processHostsBlocked(dnsblock.blockedDomains, 'domains.blocked');
+            return dnsblock.processHostsBlocked(dnsblock.blockedDomains, 'test/test1.domains.blocked', dnsblock.whitelistedDomains);
         });
         it(`domain ${REALADSERVER} should now be blocked`, () => {
-           expect(dnsblock.blockedDomains.isBlocked(REALADSERVER)).to.be.true;
+           expect(dnsblock.blockedDomains.isBlocked(REALADSERVER)).to.equal(REALADSERVER);
         });
         it(`domain ${WIKIPEDIA} should not be blocked`, () => {
             expect(dnsblock.blockedDomains.isBlocked(WIKIPEDIA)).to.be.false;
@@ -140,6 +140,7 @@ describe('Test command line', () => {
             expect(params).to.deep.equal({
                 hostsBlocked: 'myhost.txt',
                 hostsWhitelisted: '',
+                rpzFile: 'rpz.db',
                 domainsBlocked: 'mydom.blocked',
                 zonesFile: 'myzones.adblock',
                 dnsQueryLog: 'myquery.log',
