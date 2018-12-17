@@ -18,6 +18,8 @@ function log(text) {
     }
 }
 
+const whitelistedAlreadyReported = {};
+
 const DOMAIN = '([a-z0-9-_]+\\.)+[a-z0-9-_]+';
 
 const VALID_DOMAIN_REGEX = new RegExp(`^${DOMAIN}$`);
@@ -194,6 +196,8 @@ const blockedDomains = new BlockedDomainIndex();
 const whitelistedDomains = new WhitelistedDomainIndex();
 const localNameCache = { '127.0.0.1': 'localhost' };
 
+const isComment = s =>  !!s.match(/^((\s*$)|(\s*((\/\/)|#)))/);
+
 /**
  * Goes through a line from the whiteliste file and extracts the name and the
  * comment, then resolves all the cnames
@@ -201,6 +205,9 @@ const localNameCache = { '127.0.0.1': 'localhost' };
  */
 function processHostsLine(line) {
     line = line.toLowerCase().trim();
+    // ignore empty lines or comments
+    if(isComment(line)) return null;
+
     let spaceIndex = line.indexOf(' ');
     let domain = line;
     let comment = '';
@@ -208,6 +215,7 @@ function processHostsLine(line) {
         domain = line.substring(0, spaceIndex);
         comment = line.substring(spaceIndex);
     }
+
     if (!domain.match(VALID_DOMAIN_REGEX) || domain.match(NUMERIC_IPV4) || domain === 'localhost' || domain === 'localhost.localdomain') {
         throw `[${domain}] is not a valid domain, comment: [${comment}]`;
     }
@@ -238,7 +246,8 @@ function collectHostsFromFile(filename) {
     const result = [];
     rl.on('line', (line) => {
         try {
-            result.unshift(processHostsLine(line));
+            const domain = processHostsLine(line);
+            domain && result.unshift(domain);
         } catch(e) {
             console.error(e);
         }
@@ -265,9 +274,13 @@ function processHostsBlocked(cache, filename, whitelistedDomains) {
     rl.on('line', (line) => {
         try {
             let blockedDomain = processHostsLine(line);
+            if(!blockedDomain) return;
             const whitelistedBy = whitelistedDomains.isWhitelisted(blockedDomain.domain);
             if(whitelistedBy) {
-                console.log(`Domain ${blockedDomain.domain} is whitelisted by ${whitelistedBy}`);
+                if(!whitelistedAlreadyReported[blockedDomain.domain] || verbose) {
+                    whitelistedAlreadyReported[blockedDomain.domain] = true;
+                    console.log(`Domain ${blockedDomain.domain} is whitelisted by ${whitelistedBy}`);
+                }
             } else {
                 cache.blockDomain(blockedDomain.domain, blockedDomain.comment);
             }
@@ -521,5 +534,6 @@ module.exports = {
     generateZone: generateZone,
     BlockedDomain: BlockedDomain,
     filterLine: filterLine,
-    reverseDNS: reverseDNS
+    reverseDNS: reverseDNS,
+    isComment: isComment
 };

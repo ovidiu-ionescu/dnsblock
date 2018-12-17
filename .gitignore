@@ -3,4 +3,4 @@ node_modules
 domains.blocked
 temp
 .nyc_output
-
+coverage

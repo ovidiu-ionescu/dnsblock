@@ -82,6 +82,33 @@ describe('Testing core functionality', () => {
             expect(() => dnsblock.processHostsLine(badDomain)).to.throw(`[${badDomain}] is not a valid domain, comment: []`);
         });
     });
+    describe('Test the regex for commented out lines', () => {
+        it('should detect an empty line as a comment', () => {
+            expect(dnsblock.isComment('')).to.be.true;
+        });
+        it('should detect a line with just spaces as a comment', () => {
+            expect(dnsblock.isComment('    ')).to.be.true;
+        });
+        it('should detect a line commented with //', () => {
+            expect(dnsblock.isComment('// comment')).to.be.true;
+        });
+        it('should detect a line starting with spaces and // as a comment', () => {
+            expect(dnsblock.isComment('  // ')).to.be.true;
+        });
+        it('should detect a line commented with #', () => {
+            expect(dnsblock.isComment('# something')).to.be.true;
+        });
+        it('should detect a line starting with spaces and # as a comment', () => {
+            expect(dnsblock.isComment('  #')).to.be.true;
+        });
+        it('should detect a normal domain as not being a commented out line', () => {
+            expect(dnsblock.isComment('www.google.com')).to.be.false;
+        });
+        it('should detect a normal domain followed by a comment symbol as not being a commented out line', () => {
+            expect(dnsblock.isComment('www.google.com // a comment')).to.be.false;
+        });
+    });
+
     describe('Test the BlockedDomain class', () => {
         it('should handle no comment', () => {
             expect(new dnsblock.BlockedDomain(WIKIPEDIA).serialize()).to.equal(WIKIPEDIA);
